@@ -1,10 +1,12 @@
 const express = require("express");
 const bodyParser = require("body-parser");
+const cors = require('cors');
+
 
 const app = express();
-
-// Middleware to parse JSON bodies
+app.use(cors()); // Enable CORS for all routes
 app.use(express.json());
+// Middleware to parse JSON bodies
 
 // Middleware to parse URL-encoded data (if needed)
 app.use(express.urlencoded({ extended: true }));
