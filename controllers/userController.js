@@ -2,12 +2,18 @@ const db = require('../db/Connection');
 const jwt = require('jsonwebtoken');
 const bcrypt = require("bcrypt");
 const dotenv = require("dotenv");
+require('dotenv').config();
+
 
 // const { sendNotification } = require("../socket"); // Import the function from socket.js
 
 
-// Secret key for JWT (store this securely, e.g., in environment variables)
-const JWT_SECRET = 'gurdeep0111';
+// Secret key for J
+// WT (store this securely, e.g., in environment variables)
+const JWT_SECRET = process.env.VITE_API_JWT_SECRET;
+
+console.log("JWT_SECRET",JWT_SECRET)
+// const JWT_SECRET = 'gurdeep0111';
 dotenv.config();
 
 
@@ -20,6 +26,7 @@ exports.getHelloWorld = async (req, res) => {
         res.status(500).json({ error: 'Database connection failed' });
     }
 };
+
 exports.getUsers = async (req, res) => {
     try {
         // The token is verified, and user data is available in req.user
@@ -31,9 +38,68 @@ exports.getUsers = async (req, res) => {
     }
 };
 
+/*
+* Get user details for a user
+*/
+exports.getUsersDetails = async (req, res) => {
+   try {
+       const { id } = req.params;
 
+       // Fetch bank details from DB
+       const [Users] = await db.query("SELECT * FROM Users WHERE id = ?", [id]);
 
+       if (Users.length === 0) {
+           return res.status(404).json({ message: "No users details found for this user" });
+       }
 
+       res.json({ Users: Users[0] });
+   } catch (error) {
+       console.error("Error fetching bank details:", error);
+       res.status(500).json({ message: "Failed to retrieve bank details" });
+   }
+};
+
+/**
+ * Change user password
+ */
+exports.changePassword = async (req, res) => {
+    try {
+      const { currentPassword, newPassword, confirmNewPassword } = req.body;
+      const { id } = req.params;
+  
+      if (!currentPassword || !newPassword || !confirmNewPassword) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+  
+      if (newPassword !== confirmNewPassword) {
+        return res.status(400).json({ message: "New passwords do not match" });
+      }
+  
+      // Get user details
+      const [user] = await db.query("SELECT password FROM Users WHERE id = ?", [id]);
+  
+      if (user.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+  
+      const isMatch = await bcrypt.compare(currentPassword, user[0].password);
+      if (!isMatch) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+  
+      // Hash the new password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+  
+      // Update password
+      await db.query("UPDATE Users SET password = ? WHERE id = ?", [hashedPassword, id]);
+  
+      res.json({ message: "Password changed successfully" });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({ message: "Failed to change password" });
+    }
+  };
 
 // Generate a random referral code
 const generateReferralCode = () => {
@@ -129,73 +195,7 @@ exports.signup = async (req, res) => {
 
 
 
-// exports.signup = async (req, res) => {
-//     try {
-//         const { username, email, phone_number, password, referred_by } = req.body;
 
-//         // Check if the phone number already exists
-//         const [existingUser] = await db.query('SELECT * FROM users WHERE phone_number = ?', [phone_number]);
-//         if (existingUser.length > 0) {
-//             return res.status(409).json({ message: 'Phone number already exists' });
-//         }
-
-//         // Validate the referral code if provided
-//         if (referred_by) { 
-//             const [referrer] = await db.query('SELECT * FROM users WHERE referral_code = ?', [referred_by]);
-//             if (referrer.length === 0) {
-//                 return res.status(400).json({ message: 'Invalid referral code' });
-//             }
-//         }
-
-//         // Generate a unique referral code for the new user
-//         const referral_code = generateReferralCode();
-
-//         // Insert the user into the users table
-//         const [result] = await db.query(
-//             'INSERT INTO users (username, email, phone_number, password, referral_code, referred_by) VALUES (?, ?, ?, ?, ?, ?)',
-//             [username, email, phone_number, password, referral_code, referred_by || null]
-//         );
-
-//         const userId = result.insertId;
-
-//         // Create a wallet with the initial balance
-//         let initialBalance = 0;
-
-//         if (referred_by) {
-//             // Add referral bonus to the new user's wallet
-//             initialBalance = 25;
-
-//             // Add a transaction for the referral bonus
-//             const [referrerWallet] = await db.query(
-//                 'SELECT id FROM Wallet WHERE user_id = (SELECT id FROM users WHERE referral_code = ?)',
-//                 [referred_by]
-//             );
-
-//             if (referrerWallet.length > 0) {
-//                 await db.query(
-//                     'INSERT INTO Transactions (wallet_id, amount, description) VALUES (?, ?, ?)',
-//                     [referrerWallet[0].id, 25, 'Referral bonus for referred user']
-//                 );
-//             }
-//         }
-
-//         // Insert a wallet for the new user
-//         const [walletResult] = await db.query(
-//             'INSERT INTO Wallet (user_id, balance) VALUES (?, ?)',
-//             [userId, initialBalance]
-//         );
-
-//         res.status(201).json({
-//             message: 'User registered successfully!',
-//             userId,
-//             referral_code,
-//             walletId: walletResult.insertId,
-//         });
-//     } catch (error) {
-//         console.error('Error during signup:', error);
-//         res.status(500).json({ message: 'Failed to register user' });
-//     }
-// };
 
 
 // Login API
@@ -460,5 +460,79 @@ exports.updateBankDetails = async (req, res) => {
     } catch (error) {
         console.error("Error updating bank details:", error);
         res.status(500).json({ message: "Failed to update bank details" });
+    }
+};
+
+/**
+ * Add upi details for a user
+ */
+exports.addupiDetails = async (req, res) => {
+    try {
+        const { user_id, upi } = req.body;
+
+        // Check if user already has bank details
+        const [existing] = await db.query("SELECT * FROM Upidetails WHERE user_id = ?", [user_id]);
+        if (existing.length > 0) {
+            return res.status(400).json({ message: "Upi details already exist for this user. Please update instead." });
+        }
+
+        // Insert new bank details
+        await db.query(
+            "INSERT INTO Upidetails (user_id, upi) VALUES (?, ?)",
+            [user_id, upi]
+        );
+
+        res.status(201).json({ message: "UPI details added successfully" });
+    } catch (error) {
+        console.error("Error adding bank details:", error);
+        res.status(500).json({ message: "Failed to add bank details" });
+    }
+};
+
+/**
+ * Update upi details for a user
+ */
+exports.updateUpiDetails = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { upi } = req.body;
+
+        // Check if bank details exist
+        const [existing] = await db.query("SELECT * FROM Upidetails WHERE user_id = ?", [userId]);
+        if (existing.length === 0) {
+            return res.status(404).json({ message: "No Upi details found. Please add first." });
+        }
+
+        // Update bank details
+        await db.query(
+            "UPDATE Upidetails SET upi = ? WHERE user_id = ?",
+            [upi, userId]
+        );
+
+        res.json({ message: "Upi details updated successfully" });
+    } catch (error) {
+        console.error("Error updating bank details:", error);
+        res.status(500).json({ message: "Failed to update bank details" });
+    }
+};
+
+/**
+ * Get bank details for a user
+ */
+exports.getUpiDetails = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Fetch bank details from DB
+        const [Upidetails] = await db.query("SELECT * FROM Upidetails WHERE user_id = ?", [userId]);
+
+        if (Upidetails.length === 0) {
+            return res.status(404).json({ message: "No upi details found for this user" });
+        }
+
+        res.json({ Upidetails: Upidetails[0] });
+    } catch (error) {
+        console.error("Error fetching bank details:", error);
+        res.status(500).json({ message: "Failed to retrieve bank details" });
     }
 };

@@ -17,8 +17,22 @@ router.post('/applyCoupon', userController.applyCoupon);
 router.post('/signup', userController.signup);
 router.post('/login', userController.login);
 
+// Route to get bank details for a specific user
+router.get("/users-details/:id",verifyToken, userController.getUsersDetails);
+
+router.post("/users-change/:id",verifyToken, userController.changePassword);
+
+
+// Route to add upi details
+router.post("/upi-details", userController.addupiDetails);   
+// Route to update upi details
+router.put("/upi-details/:userId", userController.updateUpiDetails);  
+// Route to get upi details for a specific user
+router.get("/upi-details/:userId", userController.getUpiDetails);
+
+
 // Route to add bank details
-router.post("/bank-details", userController.addBankDetails);
+router.post("/bank-details", userController.addBankDetails); 
 
 // Route to get bank details for a specific user
 router.get("/bank-details/:userId", userController.getBankDetails);
