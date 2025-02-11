@@ -65,8 +65,8 @@ exports.getUsersDetails = async (req, res) => {
 exports.changePassword = async (req, res) => {
     try {
       const { currentPassword, newPassword, confirmNewPassword } = req.body;
-      const { id } = req.params;
-  
+      const { userId } = req.params;
+  console.log("pass",currentPassword, newPassword, confirmNewPassword)
       if (!currentPassword || !newPassword || !confirmNewPassword) {
         return res.status(400).json({ message: "All fields are required" });
       }
@@ -76,7 +76,7 @@ exports.changePassword = async (req, res) => {
       }
   
       // Get user details
-      const [user] = await db.query("SELECT password FROM Users WHERE id = ?", [id]);
+      const [user] = await db.query("SELECT password FROM Users WHERE id = ?", [userId]);
   
       if (user.length === 0) {
         return res.status(404).json({ message: "User not found" });
@@ -92,7 +92,7 @@ exports.changePassword = async (req, res) => {
       const hashedPassword = await bcrypt.hash(newPassword, salt);
   
       // Update password
-      await db.query("UPDATE Users SET password = ? WHERE id = ?", [hashedPassword, id]);
+      await db.query("UPDATE Users SET password = ? WHERE id = ?", [hashedPassword, userId]);
   
       res.json({ message: "Password changed successfully" });
     } catch (error) {
@@ -186,6 +186,7 @@ exports.signup = async (req, res) => {
             referral_code,
             balance: wallet[0]?.balance || 0, // Ensure balance is returned, default to 0 if no wallet
             token, // Optional
+            phone_number,
         });
     } catch (error) {
         console.error("Error during signup:", error);
@@ -241,6 +242,7 @@ exports.login = async (req, res) => {
             referral_code: existingUser.referral_code || null, // Include referral code if available
             balance: walletBalance,
             token: token,
+            phone_number:phone_number,
         });
 
     } catch (error) {
@@ -393,10 +395,11 @@ exports.applyCoupon = async (req, res) => {
 
 exports.addBankDetails = async (req, res) => {
     try {
-        const { user_id, acc_number, acc_holder_name, ifsc_code, bank_name } = req.body;
+        const { userId, acc_number, acc_holder_name, ifsc_code, bank_name } = req.body;
+        console.log("Received Data:", req.body); // Log the full request body
 
         // Check if user already has bank details
-        const [existing] = await db.query("SELECT * FROM Bankdetails WHERE user_id = ?", [user_id]);
+        const [existing] = await db.query("SELECT * FROM Bankdetails WHERE user_id = ?", [userId]);
         if (existing.length > 0) {
             return res.status(400).json({ message: "Bank details already exist for this user. Please update instead." });
         }
@@ -404,7 +407,7 @@ exports.addBankDetails = async (req, res) => {
         // Insert new bank details
         await db.query(
             "INSERT INTO Bankdetails (user_id, acc_number, acc_holder_name, ifsc_code, bank_name) VALUES (?, ?, ?, ?, ?)",
-            [user_id, acc_number, acc_holder_name, ifsc_code, bank_name]
+            [userId, acc_number, acc_holder_name, ifsc_code, bank_name]
         );
 
         res.status(201).json({ message: "Bank details added successfully" });
@@ -429,7 +432,7 @@ exports.getBankDetails = async (req, res) => {
             return res.status(404).json({ message: "No bank details found for this user" });
         }
 
-        res.json({ bankDetails: bankDetails[0] });
+        res.json( bankDetails[0] );
     } catch (error) {
         console.error("Error fetching bank details:", error);
         res.status(500).json({ message: "Failed to retrieve bank details" });

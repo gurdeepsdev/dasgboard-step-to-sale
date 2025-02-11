@@ -17,10 +17,10 @@ router.post('/applyCoupon', userController.applyCoupon);
 router.post('/signup', userController.signup);
 router.post('/login', userController.login);
 
-// Route to get bank details for a specific user
+// Route to chnage details for a specific user
 router.get("/users-details/:id",verifyToken, userController.getUsersDetails);
 
-router.post("/users-change/:id",verifyToken, userController.changePassword);
+router.post("/users-change/:userId",verifyToken, userController.changePassword);
 
 
 // Route to add upi details
