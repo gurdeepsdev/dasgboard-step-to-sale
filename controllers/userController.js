@@ -92,7 +92,7 @@ exports.changePassword = async (req, res) => {
       const hashedPassword = await bcrypt.hash(newPassword, salt);
   
       // Update password
-      await db.query("UPDATE Users SET password = ? WHERE id = ?", [hashedPassword, userId]);
+      await db.query("UPDATE Users SET password = ? WHERE id = ?", [hashedPassword, id]);
   
       res.json({ message: "Password changed successfully" });
     } catch (error) {
