@@ -1,25 +1,24 @@
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import Sidebar from "./component/Sidebar";
+import Navbar from "./component/Navbar";
+import CouponTable from "./component/CouponTable";
 
-function App() {
+const Dashboard = () => {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div className="flex h-screen bg-gray-100">
+      {/* Sidebar */}
+      <Sidebar />
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        <Navbar />
+
+        <div className="p-6">
+          <CouponTable />
+        </div>
+      </div>
     </div>
   );
-}
+};
 
-export default App;
+export default Dashboard;

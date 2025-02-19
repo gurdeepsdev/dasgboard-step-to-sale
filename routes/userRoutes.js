@@ -8,7 +8,7 @@ const router = express.Router();
 router.get('/', userController.getHelloWorld);
 // router.get('/users', userController.getUsers);
 router.get('/users', verifyToken, userController.getUsers);
-router.get('/notification', verifyToken, userController.getNotifications);
+router.get('/notification/:userId', verifyToken, userController.getNotifications);
 
 router.get('/getnotifications', userController.addNotification); 
 
@@ -21,6 +21,20 @@ router.post('/login', userController.login);
 router.get("/users-details/:id",verifyToken, userController.getUsersDetails);
 
 router.post("/users-change/:userId",verifyToken, userController.changePassword);
+
+// Route to add subscribe details for user
+router.post("/subscribe-details",verifyToken, userController.addsubscribeDetails);
+//add coupons 
+router.post("/add-coupon", userController.addCouponDetails);
+// Route to get all coupons
+router.get("/all-coupon", userController.getAllCoupons);
+
+// Route to get a specific coupon by slug
+router.get("/single-coupon/:slug", userController.getCouponBySlug);
+
+
+// Route to get transection history for a specific user
+router.get("/tdetails/:userId",verifyToken, userController.getTransactions);
 
 
 // Route to add upi details

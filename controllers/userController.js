@@ -254,13 +254,15 @@ exports.login = async (req, res) => {
 
 exports.getNotifications = async (req, res) => {
     try {
-        console.log("params", req.query)
-        const { userId } = req.query; // <-- Use req.query instead of req.params 
+        console.log("params", req.params)
+        const { userId } = req.params;
+        // <-- Use req.query instead of req.params 
         const [notifications] = await db.query(
             "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC",
             [userId]
         );
-        res.json({ notifications });
+        console.log("notifications",notifications)
+        res.json( notifications );
     } catch (error) {
         console.error("Error fetching notifications:", error);
         res.status(500).json({ message: "Failed to fetch notifications" });
@@ -471,10 +473,10 @@ exports.updateBankDetails = async (req, res) => {
  */
 exports.addupiDetails = async (req, res) => {
     try {
-        const { user_id, upi } = req.body;
+        const { userId, upi } = req.body;
 
         // Check if user already has bank details
-        const [existing] = await db.query("SELECT * FROM Upidetails WHERE user_id = ?", [user_id]);
+        const [existing] = await db.query("SELECT * FROM Upidetails WHERE user_id = ?", [userId]);
         if (existing.length > 0) {
             return res.status(400).json({ message: "Upi details already exist for this user. Please update instead." });
         }
@@ -482,7 +484,7 @@ exports.addupiDetails = async (req, res) => {
         // Insert new bank details
         await db.query(
             "INSERT INTO Upidetails (user_id, upi) VALUES (?, ?)",
-            [user_id, upi]
+            [userId, upi]
         );
 
         res.status(201).json({ message: "UPI details added successfully" });
@@ -499,7 +501,6 @@ exports.updateUpiDetails = async (req, res) => {
     try {
         const { userId } = req.params;
         const { upi } = req.body;
-
         // Check if bank details exist
         const [existing] = await db.query("SELECT * FROM Upidetails WHERE user_id = ?", [userId]);
         if (existing.length === 0) {
@@ -533,9 +534,176 @@ exports.getUpiDetails = async (req, res) => {
             return res.status(404).json({ message: "No upi details found for this user" });
         }
 
-        res.json({ Upidetails: Upidetails[0] });
+        res.json( Upidetails[0] );
     } catch (error) {
         console.error("Error fetching bank details:", error);
         res.status(500).json({ message: "Failed to retrieve bank details" });
+    }
+};
+
+/**
+ * Get transection history
+ */
+exports.getTransactions = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        console.log("userId",userId)
+
+        // Query to fetch transactions based on user_id
+        const [transactions] = await db.query(
+            `SELECT t.* 
+            FROM Transactions t
+            JOIN Wallet w ON t.wallet_id = w.id
+            WHERE w.user_id = ?`, 
+            [userId]
+        );
+
+        if (transactions.length === 0) {
+            return res.status(404).json({ message: "No transactions found for this user" });
+        }
+
+        res.json(transactions);
+    } catch (error) {
+        console.error("Error fetching transactions:", error);
+        res.status(500).json({ message: "Failed to retrieve transactions" });
+    }
+};
+
+
+/**
+ * Add upi details for a user
+ */
+exports.addsubscribeDetails = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: "Email is required" });
+        }
+
+        // Check if email already exists
+        const [existingEmail] = await db.query(
+            "SELECT email FROM subscribe WHERE email = ?",
+            [email]
+        );
+
+        if (existingEmail.length > 0) {
+            return res.status(409).json({ message: "Email already subscribed" });
+        }
+
+        // Insert new email into the subscribe table
+        await db.query(
+            "INSERT INTO subscribe (email) VALUES (?)",
+            [email]
+        );
+
+        res.status(201).json({ message: "Email subscribed successfully" });
+    } catch (error) {
+        console.error("Error adding email details:", error);
+        res.status(500).json({ message: "Failed to subscribe email" });
+    }
+};
+
+
+// ✅ Add a new coupon with SEO details
+
+// ✅ Add a new coupon with SEO details
+exports.addCouponDetails = async (req, res) => {
+    try {
+        const { title, offer, amount, code, expiry_date, seo_title, seo_description, slug } = req.body;
+
+        // Validate required fields
+        if (!title || !offer || !amount || !code || !expiry_date || !seo_title || !seo_description || !slug) {
+            return res.status(400).json({ message: "All fields are required!" });
+        }
+
+        // Check if the coupon code already exists
+        const [existingCoupon] = await db.query(
+            "SELECT id FROM coupons WHERE code = ?",
+            [code]
+        );
+
+        if (existingCoupon.length > 0) {
+            return res.status(409).json({ message: "Coupon code already exists!" });
+        }
+
+        // Check if the slug already exists for SEO
+        const [existingSlug] = await db.query(
+            "SELECT id FROM coupon_seo WHERE slug = ?",
+            [slug]
+        );
+
+        if (existingSlug.length > 0) {
+            return res.status(409).json({ message: "Slug already exists!" });
+        }
+
+        // Start transaction
+        await db.query("START TRANSACTION");
+
+        // Insert into coupons table
+        const [couponResult] = await db.query(
+            "INSERT INTO coupons (title, offer, amount, code, expiry_date) VALUES (?, ?, ?, ?, ?)",
+            [title, offer, amount, code, expiry_date]
+        );
+
+        const coupon_id = couponResult.insertId;
+
+        // Insert into coupon_seo table
+        await db.query(
+            "INSERT INTO coupon_seo (coupon_id, seo_title, seo_description, slug) VALUES (?, ?, ?, ?)",
+            [coupon_id, seo_title, seo_description, slug]
+        );
+
+        // Commit transaction
+        await db.query("COMMIT");
+
+        res.status(201).json({ message: "Coupon added successfully!", coupon_id });
+    } catch (error) {
+        console.error("Error adding coupon:", error);
+        await db.query("ROLLBACK");
+        res.status(500).json({ message: "Failed to add coupon" });
+    }
+};
+
+
+// ✅ Fetch all coupons with SEO details
+exports.getAllCoupons = async (req, res) => {
+    try {
+        const [coupons] = await db.query(`
+            SELECT c.id, c.title, c.offer, c.amount, c.code, c.expiry_date, 
+                   s.seo_title, s.seo_description, s.slug
+            FROM coupons c
+            JOIN coupon_seo s ON c.id = s.coupon_id
+            ORDER BY c.id DESC
+        `);
+
+        res.status(200).json({ success: true, data: coupons });
+    } catch (error) {
+        console.error("Error fetching coupons:", error);
+        res.status(500).json({ message: "Failed to fetch coupons" });
+    }
+};
+
+// ✅ Fetch a single coupon by slug
+exports.getCouponBySlug = async (req, res) => {
+    try {
+        const { slug } = req.params;
+console.log("slug",slug)
+        const [coupon] = await db.query(`
+            SELECT c.id, c.title, c.offer, c.amount, c.code, c.expiry_date, 
+                   s.seo_title, s.seo_description, s.slug
+            FROM coupons c
+            JOIN coupon_seo s ON c.id = s.coupon_id
+            WHERE s.slug = ?
+        `, [slug]);
+
+        if (coupon.length === 0) {
+            return res.status(404).json({ message: "Coupon not found" });
+        }
+
+        res.status(200).json({ success: true, data: coupon[0] });
+    } catch (error) {
+        console.error("Error fetching coupon:", error);
+        res.status(500).json({ message: "Failed to fetch coupon" });
     }
 };
