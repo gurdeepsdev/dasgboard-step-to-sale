@@ -1,5 +1,7 @@
 const express = require('express');
 const userController = require('../controllers/userController');
+const authMiddleware = require('../middlewares/authMiddleware');
+
 const verifyToken = require('../middlewares/verifyToken'); // Middleware path
 
 
@@ -28,8 +30,12 @@ router.post("/subscribe-details",verifyToken, userController.addsubscribeDetails
 router.post("/add-coupon", userController.addCouponDetails);
 // Route to get all coupons
 router.get("/all-coupon", userController.getAllCoupons);
+router.get("/all-couponss/:categoryName", userController.getAllCategoryCoupons);
+
+
 
 // Route to get a specific coupon by slug
+
 router.get("/single-coupon/:slug", userController.getCouponBySlug);
 
 
@@ -53,4 +59,11 @@ router.get("/bank-details/:userId", userController.getBankDetails);
 
 // Route to update bank details
 router.put("/bank-details/:userId", userController.updateBankDetails);
+
+
+// router.post('/register', authMiddleware(['create_admin']), createAdmin);
+// router.post('/login', loginAdmin);
+// router.get('/admins', authMiddleware(['view_admins']), getAllAdmins);
+
+
 module.exports = router;

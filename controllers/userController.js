@@ -670,7 +670,7 @@ exports.addCouponDetails = async (req, res) => {
 exports.getAllCoupons = async (req, res) => {
     try {
         const [coupons] = await db.query(`
-            SELECT c.id, c.title, c.offer, c.amount, c.code, c.expiry_date, 
+            SELECT c.id, c.title, c.offer, c.amount, c.code, c.expiry_date, c.categore,
                    s.seo_title, s.seo_description, s.slug
             FROM coupons c
             JOIN coupon_seo s ON c.id = s.coupon_id
@@ -683,6 +683,37 @@ exports.getAllCoupons = async (req, res) => {
         res.status(500).json({ message: "Failed to fetch coupons" });
     }
 };
+
+// ✅ Fetch all coupons with SEO details (filtered by category if provided)
+exports.getAllCategoryCoupons = async (req, res) => {
+    try {
+        const { categoryName } = req.params; // Get category from query params
+
+        let query = `
+            SELECT c.id, c.title, c.offer, c.amount, c.code, c.expiry_date,  c.categore,
+                   s.seo_title, s.seo_description, s.slug
+            FROM coupons c
+            JOIN coupon_seo s ON c.id = s.coupon_id
+        `;
+
+        const values = [];
+
+        if (categoryName) {
+            query += ` WHERE c.categore = ?`; // Filter by category if provided
+            values.push(categoryName);
+        }
+
+        query += ` ORDER BY c.id DESC`;
+
+        const [coupons] = await db.query(query, values);
+
+        res.status(200).json({ success: true, data: coupons });
+    } catch (error) {
+        console.error("Error fetching coupons:", error);
+        res.status(500).json({ message: "Failed to fetch coupons" });
+    }
+};
+
 
 // ✅ Fetch a single coupon by slug
 exports.getCouponBySlug = async (req, res) => {
@@ -706,4 +737,50 @@ console.log("slug",slug)
         console.error("Error fetching coupon:", error);
         res.status(500).json({ message: "Failed to fetch coupon" });
     }
+};
+
+
+// Register Admin
+exports.createAdmin = async (req, res) => {
+    const { email, password, role, permissions } = req.body;
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const sql = `INSERT INTO admins (email, password, role, permissions) VALUES (?, ?, ?, ?)`;
+        db.query(sql, [email, hashedPassword, role, JSON.stringify(permissions)], (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.status(201).json({ message: 'Admin created successfully' });
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// Login Admin
+exports.loginAdmin = (req, res) => {
+    const { email, password } = req.body;
+    const sql = `SELECT * FROM admins WHERE email = ?`;
+    db.query(sql, [email], async (err, results) => {
+        if (err || results.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
+
+        const admin = results[0];
+        const passwordMatch = await bcrypt.compare(password, admin.password);
+        if (!passwordMatch) return res.status(401).json({ message: 'Invalid credentials' });
+
+        const token = jwt.sign(
+            { id: admin.id, email: admin.email, role: admin.role, permissions: JSON.parse(admin.permissions) },
+            process.env.JWT_SECRET,
+            { expiresIn: '1h' }
+        );
+
+        res.cookie('token', token, { httpOnly: true });
+        res.json({ message: 'Login successful', token });
+    });
+};
+
+// Get All Admins (Only Super Admin)
+exports.getAllAdmins = (req, res) => {
+    db.query('SELECT id, email, role, permissions FROM admins', (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
+    });
 };
