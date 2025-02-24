@@ -9,15 +9,23 @@ const router = express.Router();
 
 router.get('/', userController.getHelloWorld);
 // router.get('/users', userController.getUsers);
-router.get('/users', verifyToken, userController.getUsers);
+router.get('/users', userController.getUsers);
 router.get('/notification/:userId', verifyToken, userController.getNotifications);
 
 router.get('/getnotifications', userController.addNotification); 
 
 router.post('/applyCoupon', userController.applyCoupon);
 
+router.post('/check-user-exist', userController.checkUserExists);  
 router.post('/signup', userController.signup);
-router.post('/login', userController.login);
+router.post('/login', userController.login);  
+router.post('/login-otp', userController.checkUserExistence);  
+router.post('/login-otp-exists', userController.checkUserExistenceOTp);  
+
+router.post('/forget-password', userController.forgotPassword);  
+
+
+
 
 // Route to chnage details for a specific user
 router.get("/users-details/:id",verifyToken, userController.getUsersDetails);
@@ -51,6 +59,14 @@ router.put("/upi-details/:userId", userController.updateUpiDetails);
 router.get("/upi-details/:userId", userController.getUpiDetails);
 
 
+// Route to add withdrew details
+router.post("/add-withdrow-details", userController.createWithdrawal);   
+
+router.post("/update-wallet",  userController.updateWallet);
+
+//route get withdrew details 
+router.get("/get-withdrow", userController.getAllWithdrawRequests);   
+
 // Route to add bank details
 router.post("/bank-details", userController.addBankDetails); 
 
@@ -59,6 +75,10 @@ router.get("/bank-details/:userId", userController.getBankDetails);
 
 // Route to update bank details
 router.put("/bank-details/:userId", userController.updateBankDetails);
+//Route to create admin
+router.post('/create-subadmin', userController.createAdmin);
+
+router.post('/adminlogin',userController.loginAdmin);
 
 
 // router.post('/register', authMiddleware(['create_admin']), createAdmin);

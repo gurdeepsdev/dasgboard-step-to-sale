@@ -4,6 +4,7 @@ const bcrypt = require("bcrypt");
 const dotenv = require("dotenv");
 require('dotenv').config();
 
+const { transactionUtils } = require("../routes/transactionUtils"); // Import function
 
 // const { sendNotification } = require("../socket"); // Import the function from socket.js
 
@@ -105,6 +106,47 @@ exports.changePassword = async (req, res) => {
 const generateReferralCode = () => {
     return Math.random().toString(36).substr(2, 6).toUpperCase();
 };
+// chekc email and phone number already exist or not 
+exports.checkUserExists = async (req, res) => {
+    try {
+        const { email, phone_number } = req.body;
+
+        let emailExists = false;
+        let phoneExists = false;
+
+        // Check if email exists (if provided)
+        if (email) {
+            const [emailResult] = await db.query("SELECT id FROM users WHERE email = ?", [email]);
+            if (emailResult.length > 0) {
+                emailExists = true;
+            }
+        }
+
+        // Check if phone number exists (if provided)
+        if (phone_number) {
+            const [phoneResult] = await db.query("SELECT id FROM users WHERE phone_number = ?", [phone_number]);
+            if (phoneResult.length > 0) {
+                phoneExists = true;
+            }
+        }
+
+        // Return messages based on which one exists
+        if (emailExists && phoneExists) {
+            return res.status(409).json({ message: "Both email and phone number already exist" });
+        } else if (emailExists) {
+            return res.status(409).json({ message: "Email already exists" });
+        } else if (phoneExists) {
+            return res.status(409).json({ message: "Phone number already exists" });
+        }
+
+        // If neither exists
+        return res.status(200).json({ message: "Email and phone number are available" });
+    } catch (error) {
+        console.error("Error checking user existence:", error);
+        return res.status(500).json({ message: "Error checking user existence" });
+    }
+};
+
 
 // Signup API
 exports.signup = async (req, res) => {
@@ -195,6 +237,29 @@ exports.signup = async (req, res) => {
 };
 
 
+// forget passowrd
+exports.forgotPassword = async (req, res) => {
+    try {
+        const { phone_number, new_password } = req.body;
+
+        // Check if the phone number exists
+        const [user] = await db.query("SELECT id FROM users WHERE phone_number = ?", [phone_number]);
+        if (user.length === 0) {
+            return res.status(404).json({ message: "Phone number not found!" });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(new_password, 10);
+
+        // Update password in the database
+        await db.query("UPDATE users SET password = ? WHERE phone_number = ?", [hashedPassword, phone_number]);
+
+        res.status(200).json({ message: "Password updated successfully!" });
+    } catch (error) {
+        console.error("Error resetting password:", error);
+        res.status(500).json({ message: "Failed to reset password" });
+    }
+};
 
 
 
@@ -251,7 +316,65 @@ exports.login = async (req, res) => {
     }
 };
 
+exports.checkUserExistenceOTp = async (req, res) => {
+    try {
+        const { phone_number } = req.body;
 
+        if (!phone_number) {
+            return res.status(400).json({ status: "Phone number is required" });
+        }
+
+        const [user] = await db.query('SELECT id FROM users WHERE phone_number = ?', [phone_number]);
+
+        if (user.length === 0) {
+            return res.status(200).json({ status: "User does not exist" });
+        }
+
+        return res.status(200).json({ status: "User exists" });
+
+    } catch (error) {
+        console.error('Error checking user existence:', error);
+        return res.status(500).json({ status: "Error checking user existence" });
+    }
+};
+
+
+// Check if user exists (for OTP verification)
+exports.checkUserExistence = async (req, res) => {
+    try {
+        const { phone_number } = req.body;
+
+        // Check if the user exists with the provided phone number
+        const [user] = await db.query('SELECT * FROM users WHERE phone_number = ?', [phone_number]);
+        if (user.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const existingUser = user[0];
+
+        // Fetch Wallet data for the user
+        const [walletData] = await db.query('SELECT balance FROM wallet WHERE user_id = ?', [existingUser.id]);
+        const walletBalance = walletData.length > 0 ? walletData[0].balance : "0.00";
+
+        // Respond with user details
+        res.status(200).json({
+            message: 'User found',
+            userId: existingUser.id,
+            username: existingUser.username,
+            email: existingUser.email || null,
+            referral_code: existingUser.referral_code || null,
+            balance: walletBalance,
+            phone_number: existingUser.phone_number,
+        });
+
+    } catch (error) {
+        console.error('Error checking user existence:', error);
+        res.status(500).json({ message: 'Failed to check user existence' });
+    }
+};
+
+
+//notification 
 exports.getNotifications = async (req, res) => {
     try {
         console.log("params", req.params)
@@ -393,7 +516,61 @@ exports.applyCoupon = async (req, res) => {
     }
 };
 
+const sendNotification = async (user_id, message) => {
+    try {
+        await db.query("INSERT INTO notifications (user_id, message) VALUES (?, ?)", [user_id, message]);
+    } catch (error) {
+        console.error("Error sending notification:", error);
+    }
+};
 
+
+// Update wallet based on success or failure coupon use 
+
+exports.updateWallet = async (req, res) => {
+    const { user_id, success, amount } = req.body;
+
+    if (!user_id || success === undefined || amount === undefined) {
+        return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    let connection;
+
+    try {
+        connection = await db.getConnection(); // Get a new database connection
+        await connection.beginTransaction(); // Start transaction
+
+        if (success) {
+            // 1. Update wallet balance
+            await connection.query("UPDATE wallet SET balance = balance + ? WHERE user_id = ?", [amount, user_id]);
+
+            // 2. Insert transaction
+            const description = `Amount credited: ₹${amount}`;
+            await connection.query("INSERT INTO transactions (wallet_id, amount, description) VALUES (?, ?, ?)", [user_id, amount, description]);
+
+            // 3. Send success notification
+            await sendNotification(user_id, "Wow! Amount added");
+
+            await connection.commit(); // Commit transaction
+            connection.release(); // Release connection
+
+            return res.status(200).json({ success: true, message: "Amount added successfully" });
+        } else {
+            // Send failure notification
+            await sendNotification(user_id, "Coupon use unsuccessful, try next time");
+
+            connection.release(); // Release connection
+            return res.status(200).json({ success: false, message: "Transaction failed, notification sent" });
+        }
+    } catch (error) {
+        if (connection) {
+            await connection.rollback(); // Rollback transaction on error
+            connection.release(); // Release connection
+        }
+        console.error("Error updating wallet:", error);
+        return res.status(500).json({ error: error.message });
+    }
+};
 
 exports.addBankDetails = async (req, res) => {
     try {
@@ -547,14 +724,11 @@ exports.getUpiDetails = async (req, res) => {
 exports.getTransactions = async (req, res) => {
     try {
         const { userId } = req.params;
-        console.log("userId",userId)
+        console.log("userId:", userId);
 
-        // Query to fetch transactions based on user_id
+        // Directly query the Transactions table since wallet_id is actually user_id
         const [transactions] = await db.query(
-            `SELECT t.* 
-            FROM Transactions t
-            JOIN Wallet w ON t.wallet_id = w.id
-            WHERE w.user_id = ?`, 
+            `SELECT * FROM Transactions WHERE wallet_id = ?`, 
             [userId]
         );
 
@@ -568,6 +742,7 @@ exports.getTransactions = async (req, res) => {
         res.status(500).json({ message: "Failed to retrieve transactions" });
     }
 };
+
 
 
 /**
@@ -610,10 +785,10 @@ exports.addsubscribeDetails = async (req, res) => {
 // ✅ Add a new coupon with SEO details
 exports.addCouponDetails = async (req, res) => {
     try {
-        const { title, offer, amount, code, expiry_date, seo_title, seo_description, slug } = req.body;
+        const { title, offer, amount, code, expiry_date, seo_title, seo_description, slug ,categore} = req.body;
 
         // Validate required fields
-        if (!title || !offer || !amount || !code || !expiry_date || !seo_title || !seo_description || !slug) {
+        if (!title || !offer || !amount || !code || !expiry_date || !seo_title || !seo_description || !slug || !categore)  {
             return res.status(400).json({ message: "All fields are required!" });
         }
 
@@ -642,8 +817,8 @@ exports.addCouponDetails = async (req, res) => {
 
         // Insert into coupons table
         const [couponResult] = await db.query(
-            "INSERT INTO coupons (title, offer, amount, code, expiry_date) VALUES (?, ?, ?, ?, ?)",
-            [title, offer, amount, code, expiry_date]
+            "INSERT INTO coupons (title, offer, amount, code, expiry_date, categore) VALUES (?, ?, ?, ?, ?, ?)",
+            [title, offer, amount, code, expiry_date, categore]
         );
 
         const coupon_id = couponResult.insertId;
@@ -740,47 +915,217 @@ console.log("slug",slug)
 };
 
 
-// Register Admin
-exports.createAdmin = async (req, res) => {
-    const { email, password, role, permissions } = req.body;
+// Create a withdrawal request
+
+// Create a withdrawal request with a proper transaction
+exports.createWithdrawal = async (req, res) => {
+    const { userId, amount, type } = req.body;
+
+    if (!userId || !amount || !type) {
+        return res.status(400).json({ error: "All fields are required" });
+    }
+
+    let connection;
+
     try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const sql = `INSERT INTO admins (email, password, role, permissions) VALUES (?, ?, ?, ?)`;
-        db.query(sql, [email, hashedPassword, role, JSON.stringify(permissions)], (err, result) => {
+        // Get a connection from the pool
+        connection = await db.getConnection();
+        await connection.beginTransaction(); // Start transaction
+
+        // Insert withdrawal request
+        const withdrawSql = `INSERT INTO withdraw (user_id, amount, type, status) VALUES (?, ?, ?, 'pending')`;
+        await connection.query(withdrawSql, [userId, amount, type]);
+
+        // Record the transaction
+        const transactionSql = `INSERT INTO transactions (wallet_id, amount, description) VALUES (?, ?, ?)`;
+        await connection.query(transactionSql, [userId, amount, 'Withdrawal request created']);
+
+        // Deduct amount from user’s wallet
+        const updateWalletSql = `UPDATE wallet SET balance = balance - ? WHERE user_id = ? AND balance >= ?`;
+        const [walletResult] = await connection.query(updateWalletSql, [amount, userId, amount]);
+
+                // Fetch updated wallet balance
+                const balanceSql = `SELECT balance FROM wallet WHERE user_id = ?`;
+                const [balanceResult] = await connection.query(balanceSql, [userId]);
+                const updatedBalance = balanceResult[0]?.balance || 0;
+        
+
+        if (walletResult.affectedRows === 0) {
+            await connection.rollback(); // Rollback if insufficient balance
+            return res.status(400).json({ error: "Insufficient balance" });
+        }
+
+        await connection.commit(); // Commit transaction
+        res.status(201).json({ 
+            message: "Withdrawal request submitted successfully",
+            updatedBalance 
+        });
+
+    } catch (error) {
+        if (connection) await connection.rollback(); // Rollback on error
+        res.status(500).json({ error: error.message });
+    } finally {
+        if (connection) connection.release(); // Release connection
+    }
+};
+
+
+
+// Get all withdrawals for a user
+exports.getWithdrawalsByUser = async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        const sql = `SELECT * FROM withdraw WHERE user_id = ? ORDER BY created_at DESC`;
+        db.query(sql, [userId], (err, results) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ message: 'Admin created successfully' });
+            res.status(200).json({ success: true, data: results });
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
-// Login Admin
+// Get all withdrawal requests (Admin API)
+// Get all withdrawal requests (Admin API)
+exports.getAllWithdrawRequests = async (req, res) => {
+    try {
+        // Use `await` with promise-based MySQL query
+        const [results] = await db.query(`SELECT * FROM withdraw ORDER BY created_at DESC`);
+        
+        res.status(200).json({ success: true, data: results });
+    } catch (error) {
+        console.error("Error fetching withdrawal requests:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+
+// Update withdrawal status (Admin)
+exports.updateWithdrawalStatus = async (req, res) => {
+    const { withdrawId, status } = req.body;
+
+    if (!withdrawId || !status) {
+        return res.status(400).json({ error: "Withdrawal ID and status are required" });
+    }
+
+    try {
+        // Fetch withdrawal request details
+        const [withdrawal] = await db.query(`SELECT * FROM withdraw WHERE id = ?`, [withdrawId]);
+
+        if (!withdrawal.length) {
+            return res.status(404).json({ error: "Withdrawal request not found" });
+        }
+
+        const { user_id, amount } = withdrawal[0];
+
+        // Update withdrawal status
+        const updateSql = `UPDATE withdraw SET status = ? WHERE id = ?`;
+        await db.query(updateSql, [status, withdrawId]);
+
+        // Handle transaction logging
+        if (status === 'approved') {
+            const transactionSql = `INSERT INTO transactions (wallet_id, amount, description) VALUES (?, ?, ?)`;
+            await db.query(transactionSql, [user_id, -amount, 'Withdrawal approved']);
+        } else if (status === 'rejected') {
+            // Refund balance if rejected
+            const refundWalletSql = `UPDATE wallet SET balance = balance + ? WHERE user_id = ?`;
+            await db.query(refundWalletSql, [amount, user_id]);
+        }
+
+        res.status(200).json({ message: `Withdrawal request ${status} successfully` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+
+exports.createAdmin = async (req, res) => {
+    const { email, password, role, permissions } = req.body;
+    
+    if (!email || !password || !role || !permissions) {
+        return res.status(400).json({ message: "All fields are required" });
+    }
+
+    try {
+        // Hash the password before storing it
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Insert into database
+        const sql = `INSERT INTO admins (email, password, role, permissions) VALUES (?, ?, ?, ?)`;
+        db.query(sql, [email, hashedPassword, role, JSON.stringify(permissions)], (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            res.status(201).json({ message: "Sub-admin created successfully" });
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
 exports.loginAdmin = (req, res) => {
     const { email, password } = req.body;
     const sql = `SELECT * FROM admins WHERE email = ?`;
+
     db.query(sql, [email], async (err, results) => {
-        if (err || results.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
+        
+        if (err || results.length === 0) {
+            return res.status(401).json({ message: "Invalid credentials" });
+        }
 
         const admin = results[0];
         const passwordMatch = await bcrypt.compare(password, admin.password);
-        if (!passwordMatch) return res.status(401).json({ message: 'Invalid credentials' });
 
-        const token = jwt.sign(
-            { id: admin.id, email: admin.email, role: admin.role, permissions: JSON.parse(admin.permissions) },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
+        if (!passwordMatch) {
+            return res.status(401).json({ message: "Invalid credentials" });
+        }
 
-        res.cookie('token', token, { httpOnly: true });
-        res.json({ message: 'Login successful', token });
+        res.json({ message: "Login successful", admin: { id: admin.id, email: admin.email } });
     });
 };
 
-// Get All Admins (Only Super Admin)
-exports.getAllAdmins = (req, res) => {
-    db.query('SELECT id, email, role, permissions FROM admins', (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(results);
-    });
-};
+
+
+// // Register Admin
+// exports.createAdmin = async (req, res) => {
+//     const { email, password, role, permissions } = req.body;
+//     try {
+//         const hashedPassword = await bcrypt.hash(password, 10);
+//         const sql = `INSERT INTO admins (email, password, role, permissions) VALUES (?, ?, ?, ?)`;
+//         db.query(sql, [email, hashedPassword, role, JSON.stringify(permissions)], (err, result) => {
+//             if (err) return res.status(500).json({ error: err.message });
+//             res.status(201).json({ message: 'Admin created successfully' });
+//         });
+//     } catch (error) {
+//         res.status(500).json({ error: error.message });
+//     }
+// };
+
+// // Login Admin
+// exports.loginAdmin = (req, res) => {
+//     const { email, password } = req.body;
+//     const sql = `SELECT * FROM admins WHERE email = ?`;
+//     db.query(sql, [email], async (err, results) => {
+//         if (err || results.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
+
+//         const admin = results[0];
+//         const passwordMatch = await bcrypt.compare(password, admin.password);
+//         if (!passwordMatch) return res.status(401).json({ message: 'Invalid credentials' });
+
+//         const token = jwt.sign(
+//             { id: admin.id, email: admin.email, role: admin.role, permissions: JSON.parse(admin.permissions) },
+//             process.env.JWT_SECRET,
+//             { expiresIn: '1h' }
+//         );
+
+//         res.cookie('token', token, { httpOnly: true });
+//         res.json({ message: 'Login successful', token });
+//     });
+// };
+
+// // Get All Admins (Only Super Admin)
+// exports.getAllAdmins = (req, res) => {
+//     db.query('SELECT id, email, role, permissions FROM admins', (err, results) => {
+//         if (err) return res.status(500).json({ error: err.message });
+//         res.json(results);
+//     });
+// };
