@@ -1,6 +1,7 @@
 const express = require('express');
 const userController = require('../controllers/userController');
 const authMiddleware = require('../middlewares/authMiddleware');
+const { updateUserImage, upload } = require("../controllers/imgController");
 
 const verifyToken = require('../middlewares/verifyToken'); // Middleware path
 
@@ -24,6 +25,7 @@ router.post('/login-otp-exists', userController.checkUserExistenceOTp);
 
 router.post('/forget-password', userController.forgotPassword);  
 
+router.post("/updateimage", upload.single("image"), updateUserImage);
 
 
 
