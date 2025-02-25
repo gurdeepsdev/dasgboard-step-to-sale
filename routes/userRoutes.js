@@ -1,5 +1,7 @@
 const express = require('express');
 const userController = require('../controllers/userController');
+const withdrawController = require('../controllers/withdrawController');
+
 const authMiddleware = require('../middlewares/authMiddleware');
 const { updateUserImage, upload } = require("../controllers/imgController");
 
@@ -63,6 +65,9 @@ router.get("/upi-details/:userId", userController.getUpiDetails);
 
 // Route to add withdrew details
 router.post("/add-withdrow-details", userController.createWithdrawal);   
+router.post("/update-withdrow-details", withdrawController.updateWithdrawalStatus);   
+
+
 
 router.post("/update-wallet",  userController.updateWallet);
 

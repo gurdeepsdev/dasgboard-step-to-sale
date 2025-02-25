@@ -6,7 +6,8 @@ require('dotenv').config();
 const multer = require("multer");
 const path = require("path");
 
-
+const cron = require('node-cron');
+const axios = require('axios');
 const { transactionUtils } = require("../routes/transactionUtils"); // Import function
 
 // const { sendNotification } = require("../socket"); // Import the function from socket.js
@@ -21,61 +22,53 @@ console.log("JWT_SECRET",JWT_SECRET)
 dotenv.config();
 
 
-// Multer storage configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, "uploads/"); // Store images in 'uploads/' folder
-    },
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `user-${req.body.user_id}-${Date.now()}${ext}`);
-    },
-});
 
-// File filter for images only
-const fileFilter = (req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) {
-        cb(null, true);
-    } else {
-        cb(new Error("Only images are allowed"), false);
-    }
-};
+// API URL
+const API_URL = 'https://api.clickorbits.in/v2/publisher/campaigns?apiKey=67b338306b22c2db1f0eb2b9eb967b338306b265';
 
-// Multer middleware
-const upload = multer({ storage, fileFilter });
+// Function to fetch and store data
+async function fetchData() {
+    try {
+        const response = await axios.get(API_URL);
+        const campaigns = response.data.data.campaigns;
 
-// Update user image API
-exports.updateUserImage = (req, res) => {
-    const { user_id } = req.body;
-
-    if (!req.file || !user_id) {
-        return res.status(400).json({ message: "User ID and image are required" });
-    }
-
-    const imagePath = `/uploads/${req.file.filename}`;
-
-    db.query(
-        "UPDATE users SET img = ? WHERE id = ?",
-        [imagePath, user_id],
-        (err, result) => {
-            if (err) {
-                console.error("Error updating user image:", err);
-                return res.status(500).json({ message: "Database error" });
+        for (let campaign of campaigns) {
+            const { id, title, description, kpi, currency, preview_url, tracking_link, categories, countries, model, payouts, creatives } = campaign;
+            const payout = payouts.length > 0 ? payouts[0].payout : 0;
+            const payout_model = payouts.length > 0 ? payouts[0].payout_model : '';
+            
+            let banner_url = null;
+            let logo_url = null;
+            
+            // Store creatives separately
+            for (let creative of creatives) {
+                if (creative.title.toLowerCase() === 'banner') {
+                    banner_url = creative.full_url;
+                } else if (creative.title.toLowerCase() === 'logo') {
+                    logo_url = creative.full_url;
+                }
             }
-
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ message: "User not found" });
-            }
-
-            res.status(200).json({
-                success: true,
-                message: "Profile image updated successfully",
-                image_url: imagePath,
-            });
+            
+            // Store campaign data
+            await db.execute(`INSERT INTO campaigns (id, title, description, kpi, currency, preview_url, categories, tracking_link, countries, payout, payout_model, banner_url, logo_url) 
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                              ON DUPLICATE KEY UPDATE title=VALUES(title), description=VALUES(description), kpi=VALUES(kpi), currency=VALUES(currency), 
+                              preview_url=VALUES(preview_url), categories=VALUES(categories), tracking_link=VALUES(tracking_link), 
+                              countries=VALUES(countries), payout=VALUES(payout), payout_model=VALUES(payout_model), 
+                              banner_url=VALUES(banner_url), logo_url=VALUES(logo_url)`,
+                [id, title, description, kpi, currency, preview_url, JSON.stringify(categories), tracking_link, JSON.stringify(countries), payout, payout_model, banner_url, logo_url]);
         }
-    );
-};
+        console.log('Data updated successfully');
+    } catch (error) {
+        console.error('Error fetching data:', error);
+    }
+}
 
+// Schedule cron job to run every hour
+cron.schedule('0 * * * *', fetchData);
+
+// Run on startup
+fetchData();
 
 exports.getHelloWorld = async (req, res) => {
     try {
@@ -1060,43 +1053,43 @@ exports.getAllWithdrawRequests = async (req, res) => {
 };
 
 
-// Update withdrawal status (Admin)
-exports.updateWithdrawalStatus = async (req, res) => {
-    const { withdrawId, status } = req.body;
+// // Update withdrawal status (Admin)
+// exports.updateWithdrawalStatus = async (req, res) => {
+//     const { withdrawId, status } = req.body;
 
-    if (!withdrawId || !status) {
-        return res.status(400).json({ error: "Withdrawal ID and status are required" });
-    }
+//     if (!withdrawId || !status) {
+//         return res.status(400).json({ error: "Withdrawal ID and status are required" });
+//     }
 
-    try {
-        // Fetch withdrawal request details
-        const [withdrawal] = await db.query(`SELECT * FROM withdraw WHERE id = ?`, [withdrawId]);
+//     try {
+//         // Fetch withdrawal request details
+//         const [withdrawal] = await db.query(`SELECT * FROM withdraw WHERE id = ?`, [withdrawId]);
 
-        if (!withdrawal.length) {
-            return res.status(404).json({ error: "Withdrawal request not found" });
-        }
+//         if (!withdrawal.length) {
+//             return res.status(404).json({ error: "Withdrawal request not found" });
+//         }
 
-        const { user_id, amount } = withdrawal[0];
+//         const { user_id, amount } = withdrawal[0];
 
-        // Update withdrawal status
-        const updateSql = `UPDATE withdraw SET status = ? WHERE id = ?`;
-        await db.query(updateSql, [status, withdrawId]);
+//         // Update withdrawal status
+//         const updateSql = `UPDATE withdraw SET status = ? WHERE id = ?`;
+//         await db.query(updateSql, [status, withdrawId]);
 
-        // Handle transaction logging
-        if (status === 'approved') {
-            const transactionSql = `INSERT INTO transactions (wallet_id, amount, description) VALUES (?, ?, ?)`;
-            await db.query(transactionSql, [user_id, -amount, 'Withdrawal approved']);
-        } else if (status === 'rejected') {
-            // Refund balance if rejected
-            const refundWalletSql = `UPDATE wallet SET balance = balance + ? WHERE user_id = ?`;
-            await db.query(refundWalletSql, [amount, user_id]);
-        }
+//         // Handle transaction logging
+//         if (status === 'approved') {
+//             const transactionSql = `INSERT INTO transactions (wallet_id, amount, description) VALUES (?, ?, ?)`;
+//             await db.query(transactionSql, [user_id, -amount, 'Withdrawal approved']);
+//         } else if (status === 'rejected') {
+//             // Refund balance if rejected
+//             const refundWalletSql = `UPDATE wallet SET balance = balance + ? WHERE user_id = ?`;
+//             await db.query(refundWalletSql, [amount, user_id]);
+//         }
 
-        res.status(200).json({ message: `Withdrawal request ${status} successfully` });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
+//         res.status(200).json({ message: `Withdrawal request ${status} successfully` });
+//     } catch (error) {
+//         res.status(500).json({ error: error.message });
+//     }
+// };
 
 
 exports.createAdmin = async (req, res) => {
@@ -1189,4 +1182,4 @@ exports.loginAdmin = (req, res) => {
 //     });
 // };
 
-exports.upload = upload;
+// exports.upload = upload;
