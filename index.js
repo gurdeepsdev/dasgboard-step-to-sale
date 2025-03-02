@@ -1,33 +1,28 @@
 const express = require("express");
+const path = require("path");
+
 const cors = require("cors");
 const http = require("http");
-const { Server } = require("socket.io"); // Import Socket.IO
-const cron = require('node-cron');
-const axios = require('axios');
+const cron = require("node-cron");
+const axios = require("axios");
 
 const app = express();
 const server = http.createServer(app); // Create HTTP server
 
-// Initialize Socket.IO correctly
-const io = new Server(server, {
-    cors: {
-        origin: "http://localhost:5173", // Adjust this for security (use your frontend URL)
-    }
-});
+// ✅ Enable CORS for all origins (change if needed)
+app.use(cors({ origin: "http://localhost:5173",
+  methods: "GET,POST,PUT,DELETE", 
+credentials: true }));
 
-// Listen for client connections
-io.on("connection", (socket) => {
-    console.log("A user connected:", socket.id);
+// // Serve uploads folder as a static directory
+app.use("/uploads", express.static(path.resolve(__dirname, "uploads")));
+// ✅ Enable JSON parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-    socket.on("joinRoom", (userId) => {
-        socket.join(userId); // Each user joins a room based on their userId
-        console.log(`User ${userId} joined room`);
-    });
-
-    socket.on("disconnect", () => {
-        console.log("User disconnected:", socket.id);
-    });
-});
+// ✅ Import routes
+const userRoutes = require("./routes/userRoutes");
+app.use("/api", userRoutes);
 
 // Dummy database function (replace with actual database connection)
 const db = {
@@ -36,17 +31,6 @@ const db = {
         return [[{ balance: 100 }]]; // Simulating a database response
     },
 };
-
-
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Import routes
-const userRoutes = require("./routes/userRoutes");
-app.use("/api", userRoutes);
-
-
 
 const PORT = 5000;
 server.listen(PORT, () => {

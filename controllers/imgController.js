@@ -13,7 +13,7 @@ const storage = multer.diskStorage({
     },
 });
 
-// File filter for images only
+// File filter to allow only images
 const fileFilter = (req, file, cb) => {
     if (file.mimetype.startsWith("image/")) {
         cb(null, true);
@@ -25,40 +25,47 @@ const fileFilter = (req, file, cb) => {
 // Multer middleware
 const upload = multer({ storage, fileFilter });
 
-// Update user image API
-exports.updateUserImage = (req, res) => {
-    console.log("Received File:", req.file);
-    console.log("Received Body:", req.body);
+exports.updateUserImage = async (req, res) => {
+    try {
+        console.log("🟢 Received File:", req.file);
+        console.log("🟢 Received Body:", req.body);
 
-    const { user_id } = req.body;
-    if (!req.file || !user_id) {
-        return res.status(400).json({ message: "User ID and image are required" });
-    }
+        const { user_id } = req.body;
 
-    const imagePath = `uploads/${req.file.filename}`;
-
-    db.query(
-        "UPDATE users SET img = ? WHERE id = ?",
-        [imagePath, user_id],
-        (err, result) => {
-            if (err) {
-                console.error("Database Error:", err);
-                return res.status(500).json({ message: "Database error" });
-            }
-
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ message: "User not found" });
-            }
-
-            return res.status(200).json({
-                success: true,
-                message: "Profile image updated successfully",
-                image_url: imagePath,
-            });
+        // ✅ Validation: Ensure file and user_id are provided
+        if (!req.file || !user_id) {
+            return res.status(400).json({ message: "User ID and image are required" });
         }
-    );
+
+        // ✅ Corrected Image Path
+        const imagePath = `/uploads/${req.file.filename}`;
+        const fullImageUrl = `http://localhost:5000${imagePath}`;
+
+        console.log("🔹 Image Path:", imagePath);
+        console.log("🔹 Full Image URL:", fullImageUrl);
+
+        // ✅ Database Query: Update user image
+        const [result] = await db.query("UPDATE users SET img = ? WHERE id = ?", [imagePath, user_id]);
+
+        if (result.affectedRows === 0) {
+            console.warn("⚠️ User not found");
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        console.log("✅ Image updated successfully!");
+        res.status(200).json({
+            success: true,
+            message: "Profile image updated successfully",
+            image_url: fullImageUrl,
+        });
+
+    } catch (error) {
+        console.error("❌ Server Error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
 };
 
 
-// Multer middleware export
+
+// Export multer middleware for routes
 exports.upload = upload;

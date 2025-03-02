@@ -1,6 +1,9 @@
 const express = require('express');
 const userController = require('../controllers/userController');
 const withdrawController = require('../controllers/withdrawController');
+const getCampainController = require('../controllers/getCampainController');
+const { submitFeedback, getFeedbackStats, getTopStores } = require("../controllers/feedbackController");
+
 
 const authMiddleware = require('../middlewares/authMiddleware');
 const { updateUserImage, upload } = require("../controllers/imgController");
@@ -16,6 +19,20 @@ router.get('/users', userController.getUsers);
 router.get('/notification/:userId', verifyToken, userController.getNotifications);
 
 router.get('/getnotifications', userController.addNotification); 
+//get compains
+router.get('/get-campains', getCampainController.getCampaigns); 
+router.get('/get-click', getCampainController.Clicks); 
+router.get('/track-conversion', getCampainController.trackConversion); 
+
+
+//coupon feedback
+
+router.post("/feedback", verifyToken,submitFeedback);
+router.get("/:id/feedback", getFeedbackStats);
+router.get("/topStores",getTopStores);
+
+
+
 
 router.post('/applyCoupon', userController.applyCoupon);
 
@@ -28,6 +45,9 @@ router.post('/login-otp-exists', userController.checkUserExistenceOTp);
 router.post('/forget-password', userController.forgotPassword);  
 
 router.post("/updateimage", upload.single("image"), updateUserImage);
+router.get("/getimage/:user_id", getCampainController.getUserImage);
+
+
 
 
 
@@ -52,7 +72,7 @@ router.get("/single-coupon/:slug", userController.getCouponBySlug);
 
 
 // Route to get transection history for a specific user
-router.get("/tdetails/:userId",verifyToken, userController.getTransactions);
+router.get("/tdetails/:userId", userController.getTransactions);
 
 
 // Route to add upi details

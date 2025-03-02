@@ -65,10 +65,59 @@ async function fetchData() {
 }
 
 // Schedule cron job to run every hour
-cron.schedule('0 * * * *', fetchData);
+cron.schedule('0,30 * * * *', fetchData);
 
 // Run on startup
 fetchData();
+
+
+
+async function checkPendingConversions() {
+    try {
+        console.log("🔄 Checking pending conversions...");
+
+        const [pendingConversions] = await db.query(
+            "SELECT * FROM conversions WHERE status = 'pending'"
+        );
+
+        if (pendingConversions.length === 0) {
+            console.log("✅ No pending conversions found.");
+            return;
+        }
+
+        for (let conversion of pendingConversions) {
+            const { id, click_id, amount, user_id } = conversion;
+
+            // Simulating confirmation (you may need an API call here)
+            const isConfirmed = true;
+
+            if (isConfirmed) {
+                await db.query("UPDATE conversions SET status = 'confirmed' WHERE id = ?", [id]);
+
+                console.log(`✅ Conversion confirmed for Click ID: ${click_id},${user_id}`);
+
+                if (amount) {
+                    await axios.post("http://localhost:5000/api/applyCoupon", {
+                        userId: user_id,  // ✅ Match Postman key
+                        amountEarned: amount,  // ✅ Match Postman key
+                    });
+                    console.log(`🚀 High-value reward API called for User ID: ${user_id}`);
+                } else {
+                    // await axios.post("https://yourwebsite.com/api/regular-reward", {
+                    //     user_id,
+                    //     amount,
+                    // });
+                    console.log(`🚀 Regular reward API called for User ID: ${user_id}`);
+                }
+            }
+        }
+    } catch (error) {
+        console.error("❌ Error checking pending conversions:", error);
+    }
+}
+
+// Run every 30 minutes
+cron.schedule("*/2 * * * *", checkPendingConversions);
 
 exports.getHelloWorld = async (req, res) => {
     try {
@@ -145,7 +194,7 @@ exports.changePassword = async (req, res) => {
       const hashedPassword = await bcrypt.hash(newPassword, salt);
   
       // Update password
-      await db.query("UPDATE Users SET password = ? WHERE id = ?", [hashedPassword, id]);
+      await db.query("UPDATE Users SET password = ? WHERE id = ?", [hashedPassword, userId]);
   
       res.json({ message: "Password changed successfully" });
     } catch (error) {
@@ -912,59 +961,69 @@ exports.getAllCoupons = async (req, res) => {
 };
 
 // ✅ Fetch all coupons with SEO details (filtered by category if provided)
+
 exports.getAllCategoryCoupons = async (req, res) => {
     try {
-        const { categoryName } = req.params; // Get category from query params
+        const { categoryName } = req.params; // Get category name from frontend
 
         let query = `
-            SELECT c.id, c.title, c.offer, c.amount, c.code, c.expiry_date,  c.categore,
-                   s.seo_title, s.seo_description, s.slug
-            FROM coupons c
-            JOIN coupon_seo s ON c.id = s.coupon_id
+            SELECT id, title, description, currency, preview_url, tracking_link, 
+                   categories, payout, payout_model, banner_url, logo_url
+            FROM campaigns
         `;
 
         const values = [];
 
-        if (categoryName) {
-            query += ` WHERE c.categore = ?`; // Filter by category if provided
-            values.push(categoryName);
+        // If categoryName is not "All", filter by category
+        if (categoryName && categoryName !== "All") {
+            query += ` WHERE JSON_UNQUOTE(categories) LIKE ?`;
+            values.push(`%${categoryName}%`);
         }
 
-        query += ` ORDER BY c.id DESC`;
+        query += ` ORDER BY id DESC`;
 
-        const [coupons] = await db.query(query, values);
+        const [campaigns] = await db.query(query, values);
 
-        res.status(200).json({ success: true, data: coupons });
+        res.status(200).json({
+            success: true,
+            message: campaigns.length ? "Campaigns fetched successfully" : "No campaigns found",
+            data: campaigns
+        });
     } catch (error) {
-        console.error("Error fetching coupons:", error);
-        res.status(500).json({ message: "Failed to fetch coupons" });
+        console.error("Error fetching campaigns:", error);
+        res.status(500).json({ message: "Failed to fetch campaigns" });
     }
 };
 
 
-// ✅ Fetch a single coupon by slug
+
+
+
+
+
+
+// ✅ Get campaign details by title
 exports.getCouponBySlug = async (req, res) => {
     try {
-        const { slug } = req.params;
+        const { slug } = req.params; // Extract title from request params
 console.log("slug",slug)
-        const [coupon] = await db.query(`
-            SELECT c.id, c.title, c.offer, c.amount, c.code, c.expiry_date, 
-                   s.seo_title, s.seo_description, s.slug
-            FROM coupons c
-            JOIN coupon_seo s ON c.id = s.coupon_id
-            WHERE s.slug = ?
-        `, [slug]);
 
-        if (coupon.length === 0) {
-            return res.status(404).json({ message: "Coupon not found" });
+        const [campaigns] = await db.query(
+            `SELECT * FROM campaigns WHERE title = ?`, 
+            [slug]
+        );
+
+        if (campaigns.length === 0) {
+            return res.status(404).json({ message: "Campaign not found" });
         }
 
-        res.status(200).json({ success: true, data: coupon[0] });
+        res.status(200).json({ success: true, data: campaigns[0] });
     } catch (error) {
-        console.error("Error fetching coupon:", error);
-        res.status(500).json({ message: "Failed to fetch coupon" });
+        console.error("Error fetching campaign:", error);
+        res.status(500).json({ message: "Failed to fetch campaign" });
     }
 };
+
 
 
 // Create a withdrawal request
@@ -1039,7 +1098,6 @@ exports.getWithdrawalsByUser = async (req, res) => {
 };
 
 // Get all withdrawal requests (Admin API)
-// Get all withdrawal requests (Admin API)
 exports.getAllWithdrawRequests = async (req, res) => {
     try {
         // Use `await` with promise-based MySQL query
@@ -1053,43 +1111,6 @@ exports.getAllWithdrawRequests = async (req, res) => {
 };
 
 
-// // Update withdrawal status (Admin)
-// exports.updateWithdrawalStatus = async (req, res) => {
-//     const { withdrawId, status } = req.body;
-
-//     if (!withdrawId || !status) {
-//         return res.status(400).json({ error: "Withdrawal ID and status are required" });
-//     }
-
-//     try {
-//         // Fetch withdrawal request details
-//         const [withdrawal] = await db.query(`SELECT * FROM withdraw WHERE id = ?`, [withdrawId]);
-
-//         if (!withdrawal.length) {
-//             return res.status(404).json({ error: "Withdrawal request not found" });
-//         }
-
-//         const { user_id, amount } = withdrawal[0];
-
-//         // Update withdrawal status
-//         const updateSql = `UPDATE withdraw SET status = ? WHERE id = ?`;
-//         await db.query(updateSql, [status, withdrawId]);
-
-//         // Handle transaction logging
-//         if (status === 'approved') {
-//             const transactionSql = `INSERT INTO transactions (wallet_id, amount, description) VALUES (?, ?, ?)`;
-//             await db.query(transactionSql, [user_id, -amount, 'Withdrawal approved']);
-//         } else if (status === 'rejected') {
-//             // Refund balance if rejected
-//             const refundWalletSql = `UPDATE wallet SET balance = balance + ? WHERE user_id = ?`;
-//             await db.query(refundWalletSql, [amount, user_id]);
-//         }
-
-//         res.status(200).json({ message: `Withdrawal request ${status} successfully` });
-//     } catch (error) {
-//         res.status(500).json({ error: error.message });
-//     }
-// };
 
 
 exports.createAdmin = async (req, res) => {
