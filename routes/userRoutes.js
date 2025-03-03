@@ -1,5 +1,7 @@
 const express = require('express');
 const userController = require('../controllers/userController');
+const {getAllCoupons,loginAdmin,createAdmin} = require('../controllers/adminController');
+
 const withdrawController = require('../controllers/withdrawController');
 const getCampainController = require('../controllers/getCampainController');
 const { submitFeedback, getFeedbackStats, getTopStores } = require("../controllers/feedbackController");
@@ -61,7 +63,7 @@ router.post("/subscribe-details",verifyToken, userController.addsubscribeDetails
 //add coupons 
 router.post("/add-coupon", userController.addCouponDetails);
 // Route to get all coupons
-router.get("/all-coupon", userController.getAllCoupons);
+router.get("/all-coupon", getAllCoupons);
 router.get("/all-couponss/:categoryName", userController.getAllCategoryCoupons);
 
 
@@ -103,9 +105,9 @@ router.get("/bank-details/:userId", userController.getBankDetails);
 // Route to update bank details
 router.put("/bank-details/:userId", userController.updateBankDetails);
 //Route to create admin
-router.post('/create-subadmin', userController.createAdmin);
+router.post('/create-subadmin', createAdmin);
 
-router.post('/adminlogin',userController.loginAdmin);
+router.post('/adminlogin',loginAdmin);
 
 
 // router.post('/register', authMiddleware(['create_admin']), createAdmin);
