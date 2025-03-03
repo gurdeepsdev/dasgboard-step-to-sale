@@ -62,6 +62,8 @@ exports.createAdmin = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+//admin login
 exports.loginAdmin = async (req, res) => {
     try {
         console.log("🟢 Login Request Received:", req.body);
@@ -104,5 +106,40 @@ exports.loginAdmin = async (req, res) => {
     } catch (error) {
         console.error("❌ Server Error:", error);
         res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+
+
+// ✅ Fetch Bank & UPI details based on user_id
+exports.getUserFinancialDetails = async (req, res) => {
+    try {
+        const { user_id } = req.params;
+
+        // Validate user_id
+        if (!user_id) {
+            return res.status(400).json({ success: false, message: "User ID is required" });
+        }
+
+        // Query to fetch details from both tables
+        const query = `
+            SELECT 'Bank' as type, acc_number, acc_holder_name, ifsc_code, bank_name, NULL as upi 
+            FROM Bankdetails WHERE user_id = ?
+            UNION ALL
+            SELECT 'UPI' as type, NULL as acc_number, NULL as acc_holder_name, NULL as ifsc_code, NULL as bank_name, upi
+            FROM Upidetails WHERE user_id = ?
+        `;
+
+        const [results] = await db.query(query, [user_id, user_id]);
+
+        // If no data found
+        if (results.length === 0) {
+            return res.status(404).json({ success: false, message: "No details found for this user" });
+        }
+
+        res.status(200).json({ success: true, user_id, details: results });
+    } catch (error) {
+        console.error("Error fetching user financial details:", error);
+        res.status(500).json({ success: false, message: "Database error", error });
     }
 };

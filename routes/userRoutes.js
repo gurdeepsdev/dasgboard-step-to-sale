@@ -1,6 +1,6 @@
 const express = require('express');
 const userController = require('../controllers/userController');
-const {getAllCoupons,loginAdmin,createAdmin} = require('../controllers/adminController');
+const {getAllCoupons,loginAdmin,createAdmin,getUserFinancialDetails} = require('../controllers/adminController');
 
 const withdrawController = require('../controllers/withdrawController');
 const getCampainController = require('../controllers/getCampainController');
@@ -63,9 +63,9 @@ router.post("/subscribe-details",verifyToken, userController.addsubscribeDetails
 //add coupons 
 router.post("/add-coupon", userController.addCouponDetails);
 // Route to get all coupons
-router.get("/all-coupon", getAllCoupons);
+router.get("/all-coupon", getAllCoupons);   
 router.get("/all-couponss/:categoryName", userController.getAllCategoryCoupons);
-
+router.get("/get-user-bank/:user_id", getUserFinancialDetails); 
 
 
 // Route to get a specific coupon by slug
@@ -78,9 +78,9 @@ router.get("/tdetails/:userId", userController.getTransactions);
 
 
 // Route to add upi details
-router.post("/upi-details", userController.addupiDetails);   
+router.post("/upi-details", userController.upsertUpiDetails);   
 // Route to update upi details
-router.put("/upi-details/:userId", userController.updateUpiDetails);  
+// router.put("/upi-details/:userId", userController.updateUpiDetails);  
 // Route to get upi details for a specific user
 router.get("/upi-details/:userId", userController.getUpiDetails);
 

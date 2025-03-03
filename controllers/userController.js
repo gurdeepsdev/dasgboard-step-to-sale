@@ -746,61 +746,35 @@ exports.updateBankDetails = async (req, res) => {
     }
 };
 
-/**
- * Add upi details for a user
- */
-exports.addupiDetails = async (req, res) => {
+//add upi and update upi
+exports.upsertUpiDetails = async (req, res) => {
     try {
         const { userId, upi } = req.body;
 
-        // Check if user already has bank details
+        // Validate input
+        if (!userId || !upi) {
+            return res.status(400).json({ message: "User ID and UPI are required" });
+        }
+
+        // Check if UPI details exist for this user
         const [existing] = await db.query("SELECT * FROM Upidetails WHERE user_id = ?", [userId]);
+
         if (existing.length > 0) {
-            return res.status(400).json({ message: "Upi details already exist for this user. Please update instead." });
+            // Update existing UPI details
+            await db.query("UPDATE Upidetails SET upi = ? WHERE user_id = ?", [upi, userId]);
+            return res.json({ message: "UPI details updated successfully" });
+        } else {
+            // Insert new UPI details
+            await db.query("INSERT INTO Upidetails (user_id, upi) VALUES (?, ?)", [userId, upi]);
+            return res.status(201).json({ message: "UPI details added successfully" });
         }
-
-        // Insert new bank details
-        await db.query(
-            "INSERT INTO Upidetails (user_id, upi) VALUES (?, ?)",
-            [userId, upi]
-        );
-
-        res.status(201).json({ message: "UPI details added successfully" });
     } catch (error) {
-        console.error("Error adding bank details:", error);
-        res.status(500).json({ message: "Failed to add bank details" });
+        console.error("Error handling UPI details:", error);
+        res.status(500).json({ message: "Failed to process UPI details", error });
     }
 };
 
-/**
- * Update upi details for a user
- */
-exports.updateUpiDetails = async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const { upi } = req.body;
-        // Check if bank details exist
-        const [existing] = await db.query("SELECT * FROM Upidetails WHERE user_id = ?", [userId]);
-        if (existing.length === 0) {
-            return res.status(404).json({ message: "No Upi details found. Please add first." });
-        }
-
-        // Update bank details
-        await db.query(
-            "UPDATE Upidetails SET upi = ? WHERE user_id = ?",
-            [upi, userId]
-        );
-
-        res.json({ message: "Upi details updated successfully" });
-    } catch (error) {
-        console.error("Error updating bank details:", error);
-        res.status(500).json({ message: "Failed to update bank details" });
-    }
-};
-
-/**
- * Get bank details for a user
- */
+ //Get bank details for a user
 exports.getUpiDetails = async (req, res) => {
     try {
         const { userId } = req.params;
