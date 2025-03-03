@@ -1135,25 +1135,49 @@ exports.createAdmin = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
-exports.loginAdmin = (req, res) => {
-    const { email, password } = req.body;
-    const sql = `SELECT * FROM admins WHERE email = ?`;
+exports.loginAdmin = async (req, res) => {
+    try {
+        console.log("🟢 Login Request Received:", req.body);
 
-    db.query(sql, [email], async (err, results) => {
-        
-        if (err || results.length === 0) {
+        const { email, password } = req.body;
+
+        // ✅ Validation: Ensure both email and password are provided
+        if (!email || !password) {
+            return res.status(400).json({ message: "Email and password are required" });
+        }
+
+        // ✅ Fetch Admin by Email
+        const [results] = await db.query("SELECT * FROM admins WHERE email = ?", [email]);
+
+        if (!results.length) {
+            console.warn("⚠️ Admin not found");
             return res.status(401).json({ message: "Invalid credentials" });
         }
 
         const admin = results[0];
+
+        // ✅ Verify Password
         const passwordMatch = await bcrypt.compare(password, admin.password);
 
         if (!passwordMatch) {
+            console.warn("⚠️ Incorrect password");
             return res.status(401).json({ message: "Invalid credentials" });
         }
 
-        res.json({ message: "Login successful", admin: { id: admin.id, email: admin.email } });
-    });
+        console.log("✅ Admin logged in successfully!");
+        res.status(200).json({
+            success: true,
+            message: "Login successful",
+            admin: {
+                id: admin.id,
+                email: admin.email,
+            },
+        });
+
+    } catch (error) {
+        console.error("❌ Server Error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
 };
 
 

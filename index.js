@@ -10,9 +10,11 @@ const app = express();
 const server = http.createServer(app); // Create HTTP server
 
 // ✅ Enable CORS for all origins (change if needed)
-app.use(cors({ origin: "http://localhost:5173",
+app.use(cors({ origin: ["http://localhost:5173","http://localhost:3000"],
   methods: "GET,POST,PUT,DELETE", 
 credentials: true }));
+
+
 
 // // Serve uploads folder as a static directory
 app.use("/uploads", express.static(path.resolve(__dirname, "uploads")));
