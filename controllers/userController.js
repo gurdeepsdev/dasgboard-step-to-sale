@@ -97,12 +97,13 @@ async function checkPendingConversions() {
                 console.log(`✅ Conversion confirmed for Click ID: ${click_id},${user_id}`);
 
                 if (amount) {
-                    await axios.post("http://localhost:5000/api/applyCoupon", {
+                    await axios.post("https://api.steptosale.com/api/applyCoupon", {
                         userId: user_id,  // ✅ Match Postman key
                         amountEarned: amount,  // ✅ Match Postman key
                     });
                     console.log(`🚀 High-value reward API called for User ID: ${user_id}`);
                 } else {
+                    //http://localhost:5000/api/applyCoupon
                     // await axios.post("https://yourwebsite.com/api/regular-reward", {
                     //     user_id,
                     //     amount,
@@ -132,7 +133,7 @@ exports.getHelloWorld = async (req, res) => {
 exports.getUsers = async (req, res) => {
     try {
         // The token is verified, and user data is available in req.user
-        const [rows] = await db.query('SELECT * FROM users');
+        const [rows] = await db.query('SELECT * FROM Users');
         res.status(200).json(rows);
     } catch (error) {
         console.error('Error fetching users:', error);
@@ -217,7 +218,7 @@ exports.checkUserExists = async (req, res) => {
 
         // Check if email exists (if provided)
         if (email) {
-            const [emailResult] = await db.query("SELECT id FROM users WHERE email = ?", [email]);
+            const [emailResult] = await db.query("SELECT id FROM Users WHERE email = ?", [email]);
             if (emailResult.length > 0) {
                 emailExists = true;
             }
@@ -225,7 +226,7 @@ exports.checkUserExists = async (req, res) => {
 
         // Check if phone number exists (if provided)
         if (phone_number) {
-            const [phoneResult] = await db.query("SELECT id FROM users WHERE phone_number = ?", [phone_number]);
+            const [phoneResult] = await db.query("SELECT id FROM Users WHERE phone_number = ?", [phone_number]);
             if (phoneResult.length > 0) {
                 phoneExists = true;
             }
@@ -256,14 +257,14 @@ exports.signup = async (req, res) => {
 
         // Check if the email is provided and if it already exists
         if (email) {
-            const [existingEmail] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+            const [existingEmail] = await db.query("SELECT * FROM Users WHERE email = ?", [email]);
             if (existingEmail.length > 0) {
                 return res.status(409).json({ message: "Email already exists" });
             }
         }
 
         // Check if the phone number already exists
-        const [existingPhone] = await db.query("SELECT * FROM users WHERE phone_number = ?", [phone_number]);
+        const [existingPhone] = await db.query("SELECT * FROM Users WHERE phone_number = ?", [phone_number]);
         if (existingPhone.length > 0) {
             return res.status(409).json({ message: "Phone number already exists" });
         }
@@ -271,7 +272,7 @@ exports.signup = async (req, res) => {
         // Validate the referral code if provided
         let referrerId = null;
         if (referred_by) {
-            const [referrer] = await db.query("SELECT id FROM users WHERE referral_code = ?", [referred_by]);
+            const [referrer] = await db.query("SELECT id FROM Users WHERE referral_code = ?", [referred_by]);
             if (referrer.length === 0) {
                 return res.status(400).json({ message: "Invalid referral code" });
             }
@@ -290,7 +291,7 @@ exports.signup = async (req, res) => {
 
         // Insert the user into the users table
         const [result] = await db.query(
-            "INSERT INTO users (username, email, phone_number, password, referral_code, referred_by) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO Users (username, email, phone_number, password, referral_code, referred_by) VALUES (?, ?, ?, ?, ?, ?)",
             [username, email || null, phone_number, hashedPassword, referral_code, referrerId]
         );
 
@@ -344,7 +345,7 @@ exports.forgotPassword = async (req, res) => {
         const { phone_number, new_password } = req.body;
 
         // Check if the phone number exists
-        const [user] = await db.query("SELECT id FROM users WHERE phone_number = ?", [phone_number]);
+        const [user] = await db.query("SELECT id FROM Users WHERE phone_number = ?", [phone_number]);
         if (user.length === 0) {
             return res.status(404).json({ message: "Phone number not found!" });
         }
@@ -353,7 +354,7 @@ exports.forgotPassword = async (req, res) => {
         const hashedPassword = await bcrypt.hash(new_password, 10);
 
         // Update password in the database
-        await db.query("UPDATE users SET password = ? WHERE phone_number = ?", [hashedPassword, phone_number]);
+        await db.query("UPDATE Users SET password = ? WHERE phone_number = ?", [hashedPassword, phone_number]);
 
         res.status(200).json({ message: "Password updated successfully!" });
     } catch (error) {
@@ -371,7 +372,7 @@ exports.login = async (req, res) => {
         const { phone_number, password } = req.body;
 
         // Check if the user exists with the provided phone number
-        const [user] = await db.query('SELECT * FROM users WHERE phone_number = ?', [phone_number]);
+        const [user] = await db.query('SELECT * FROM Users WHERE phone_number = ?', [phone_number]);
         if (user.length === 0) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -385,7 +386,7 @@ exports.login = async (req, res) => {
         }
 
         // Fetch Wallet data for the user
-        const [walletData] = await db.query('SELECT balance FROM wallet WHERE user_id = ?', [existingUser.id]);
+        const [walletData] = await db.query('SELECT balance FROM Wallet WHERE user_id = ?', [existingUser.id]);
         const walletBalance = walletData.length > 0 ? walletData[0].balance : "0.00";
 
         // Generate a JWT token
@@ -425,7 +426,7 @@ exports.checkUserExistenceOTp = async (req, res) => {
             return res.status(400).json({ status: "Phone number is required" });
         }
 
-        const [user] = await db.query('SELECT id FROM users WHERE phone_number = ?', [phone_number]);
+        const [user] = await db.query('SELECT id FROM Users WHERE phone_number = ?', [phone_number]);
 
         if (user.length === 0) {
             return res.status(200).json({ status: "User does not exist" });
@@ -446,7 +447,7 @@ exports.checkUserExistence = async (req, res) => {
         const { phone_number } = req.body;
 
         // Check if the user exists with the provided phone number
-        const [user] = await db.query('SELECT * FROM users WHERE phone_number = ?', [phone_number]);
+        const [user] = await db.query('SELECT * FROM Users WHERE phone_number = ?', [phone_number]);
         if (user.length === 0) {
             return res.status(404).json({ message: 'User not found' });
         }

@@ -128,7 +128,8 @@ exports.getUserImage = async (req, res) => {
         }
 
         const imagePath = user[0].img;
-        const fullImageUrl = `http://localhost:5000${imagePath}`;
+        const fullImageUrl = `https://api.steptosale.com${imagePath}`;
+        //http://localhost:5000
 
         console.log("✅ Image fetched successfully!");
         res.json({ success: true, image_url: fullImageUrl });

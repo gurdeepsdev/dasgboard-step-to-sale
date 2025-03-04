@@ -39,7 +39,9 @@ exports.updateUserImage = async (req, res) => {
 
         // ✅ Corrected Image Path
         const imagePath = `/uploads/${req.file.filename}`;
-        const fullImageUrl = `http://localhost:5000${imagePath}`;
+        const fullImageUrl = ` https://api.steptosale.com${imagePath}`;
+        //         http://localhost:5000${imagePath}
+
 
         console.log("🔹 Image Path:", imagePath);
         console.log("🔹 Full Image URL:", fullImageUrl);
